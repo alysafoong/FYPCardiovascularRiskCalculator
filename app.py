@@ -1,14 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle
+import joblib
 
 # Load model and scaler
-with open("logreg_model.pkl", "rb") as model_file:
-    model = pickle.load(model_file)
-
-with open("scaler.pkl", "rb") as scaler_file:
-    scaler = pickle.load(scaler_file)
+model = joblib.load("logreg_model.pkl")
+scaler = joblib.load("scaler.pkl")
 
 # Define the correct order of features
 FEATURE_COLUMNS = [
