@@ -1,127 +1,83 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
+import pickle
 
 # Load model and scaler
-model = joblib.load("logreg_model.pkl")
-scaler = joblib.load("scaler.pkl")
+with open("logreg_model.pkl", "rb") as model_file:
+    model = pickle.load(model_file)
 
-st.title("Heart Attack Risk Prediction App 💓")
+with open("scaler.pkl", "rb") as scaler_file:
+    scaler = pickle.load(scaler_file)
 
-st.write("""
-Enter the patient's medical details to predict if they are at risk of having a heart attack.
-""")
+# Define the correct order of features
+FEATURE_COLUMNS = [
+    "Sex", "GeneralHealth", "PhysicalHealthDays", "MentalHealthDays", "LastCheckupTime",
+    "PhysicalActivities", "SleepHours", "RemovedTeeth", "HadAngina",
+    "HadStroke", "HadAsthma", "HadSkinCancer", "HadCOPD", "HadDepressiveDisorder",
+    "HadKidneyDisease", "HadArthritis", "HadDiabetes", "DeafOrHardOfHearing",
+    "DifficultyConcentratingt", "DifficultyWalking", "DifficultyDressingBathing",
+    "SmokerStatus", "ChestScan", "RaceEthnicityCategory", "AgeCategory", "BMI", "AlcoholDrinkers"
+]
 
-# Define user inputs for each feature
-def user_input_features():
-    sex = st.selectbox("Sex", ["Female", "Male"])
-    general_health = st.selectbox("General Health", ["Poor", "Fair", "Good", "Very good", "Excellent"])
-    physical_activities = st.selectbox("Physical Activities", ["Yes", "No"])
-    had_angina = st.selectbox("Had Angina", ["Yes", "No"])
-    had_stroke = st.selectbox("Had Stroke", ["Yes", "No"])
-    had_asthma = st.selectbox("Had Asthma", ["Yes", "No"])
-    had_skin_cancer = st.selectbox("Had Skin Cancer", ["Yes", "No"])
-    had_copd = st.selectbox("Had COPD", ["Yes", "No"])
-    had_depressive_disorder = st.selectbox("Had Depressive Disorder", ["Yes", "No"])
-    had_kidney_disease = st.selectbox("Had Kidney Disease", ["Yes", "No"])
-    had_arthritis = st.selectbox("Had Arthritis", ["Yes", "No"])
-    had_diabetes = st.selectbox("Had Diabetes", [
-        "No",
-        "Yes",
-        "No, pre-diabetes or borderline diabetes",
-        "Yes, but only during pregnancy (female)"
-    ])
-    age_category = st.selectbox("Age Category", [
-        'Age 18 to 24', 'Age 25 to 29', 'Age 30 to 34', 'Age 35 to 39', 'Age 40 to 44',
-        'Age 45 to 49', 'Age 50 to 54', 'Age 55 to 59', 'Age 60 to 64', 'Age 65 to 69',
-        'Age 70 to 74', 'Age 75 to 79', 'Age 80 or older'
-    ])
-    last_checkup = st.selectbox("Last Checkup Time", [
-        'Within past year (anytime less than 12 months ago)',
-        'Within past 2 years (1 year but less than 2 years ago)',
-        'Within past 5 years (2 years but less than 5 years ago)',
-        '5 or more years ago'
-    ])
-    removed_teeth = st.selectbox("Removed Teeth", ['None of them', '1 to 5', '6 or more, but not all', 'All'])
-    smoker_status = st.selectbox("Smoker Status", [
-        'Never smoked', 'Former smoker',
-        'Current smoker - now smokes some days', 'Current smoker - now smokes every day'
-    ])
-    race = st.selectbox("Race/Ethnicity Category", ['White', 'Black', 'Hispanic', 'Asian', 'Other'])  # Customize based on your dataset
-    alcohol_drinkers = st.selectbox("Alcohol Drinkers", ["Yes", "No"])
-    chest_scan = st.selectbox("Chest Scan", ["Yes", "No"])
-    deaf_or_hard_of_hearing = st.selectbox("Deaf or Hard of Hearing", ["Yes", "No"])
-    difficulty_concentrating = st.selectbox("Difficulty Concentrating", ["Yes", "No"])
-    difficulty_walking = st.selectbox("Difficulty Walking", ["Yes", "No"])
-    difficulty_dressing_bathing = st.selectbox("Difficulty Dressing/Bathing", ["Yes", "No"])
+# Streamlit app
+st.title("Cardiovascular Risk Calculator")
+st.markdown("This app uses a logistic regression model to predict the risk of a cardiovascular event based on survey data.")
 
-    # Map inputs to encoded values (same as your preprocessing)
-    data = {
-        'Sex': 0 if sex == "Female" else 1,
-        'PhysicalActivities': 1 if physical_activities == "Yes" else 0,
-        'HadAngina': 1 if had_angina == "Yes" else 0,
-        'HadStroke': 1 if had_stroke == "Yes" else 0,
-        'HadAsthma': 1 if had_asthma == "Yes" else 0,
-        'HadSkinCancer': 1 if had_skin_cancer == "Yes" else 0,
-        'HadCOPD': 1 if had_copd == "Yes" else 0,
-        'HadDepressiveDisorder': 1 if had_depressive_disorder == "Yes" else 0,
-        'HadKidneyDisease': 1 if had_kidney_disease == "Yes" else 0,
-        'HadArthritis': 1 if had_arthritis == "Yes" else 0,
-        'HadDiabetes': {
-            'No': 0,
-            'Yes': 1,
-            'No, pre-diabetes or borderline diabetes': 2,
-            'Yes, but only during pregnancy (female)': 3
-        }[had_diabetes],
-        'GeneralHealth': {
-            'Poor': 0, 'Fair': 1, 'Good': 2, 'Very good': 3, 'Excellent': 4
-        }[general_health],
-        'LastCheckupTime': {
-            'Within past year (anytime less than 12 months ago)': 0,
-            'Within past 2 years (1 year but less than 2 years ago)': 1,
-            'Within past 5 years (2 years but less than 5 years ago)': 2,
-            '5 or more years ago': 3
-        }[last_checkup],
-        'RemovedTeeth': {
-            'None of them': 0, '1 to 5': 1, '6 or more, but not all': 2, 'All': 3
-        }[removed_teeth],
-        'SmokerStatus': {
-            'Never smoked': 0,
-            'Former smoker': 1,
-            'Current smoker - now smokes some days': 2,
-            'Current smoker - now smokes every day': 3
-        }[smoker_status],
-        'AgeCategory': {
-            'Age 18 to 24': 0, 'Age 25 to 29': 1, 'Age 30 to 34': 2, 'Age 35 to 39': 3, 'Age 40 to 44': 4,
-            'Age 45 to 49': 5, 'Age 50 to 54': 6, 'Age 55 to 59': 7, 'Age 60 to 64': 8, 'Age 65 to 69': 9,
-            'Age 70 to 74': 10, 'Age 75 to 79': 11, 'Age 80 or older': 12
-        }[age_category],
-        'RaceEthnicityCategory': {
-            'White': 0, 'Black': 1, 'Hispanic': 2, 'Asian': 3, 'Other': 4  # Adjust to match your label encoding
-        }[race],
-        'AlcoholDrinkers': 1 if alcohol_drinkers == "Yes" else 0,
-        'ChestScan': 1 if chest_scan == "Yes" else 0,
-        'DeafOrHardOfHearing': 1 if deaf_or_hard_of_hearing == "Yes" else 0,
-        'DifficultyConcentrating': 1 if difficulty_concentrating == "Yes" else 0,
-        'DifficultyWalking': 1 if difficulty_walking == "Yes" else 0,
-        'DifficultyDressingBathing': 1 if difficulty_dressing_bathing == "Yes" else 0,
-    }
+# Input form
+with st.form("input_form"):
+    Sex = st.selectbox("Sex", [0, 1])  # 0: Female, 1: Male
+    GeneralHealth = st.slider("General Health (1 = Excellent, 5 = Poor)", 1, 5, 3)
+    PhysicalHealthDays = st.slider("Physical Health (past 30 days)", 0, 30, 0)
+    MentalHealthDays = st.slider("Mental Health (past 30 days)", 0, 30, 0)
+    LastCheckupTime = st.selectbox("Last Checkup Time", [1, 2, 3, 4])
+    PhysicalActivities = st.selectbox("Physical Activities", [0, 1])
+    SleepHours = st.slider("Sleep Hours", 0, 24, 7)
+    RemovedTeeth = st.selectbox("Number of Teeth Removed", [0, 1, 2, 3, 4])
+    HadAngina = st.selectbox("Had Angina", [0, 1])
+    HadStroke = st.selectbox("Had Stroke", [0, 1])
+    HadAsthma = st.selectbox("Had Asthma", [0, 1])
+    HadSkinCancer = st.selectbox("Had Skin Cancer", [0, 1])
+    HadCOPD = st.selectbox("Had COPD", [0, 1])
+    HadDepressiveDisorder = st.selectbox("Had Depressive Disorder", [0, 1])
+    HadKidneyDisease = st.selectbox("Had Kidney Disease", [0, 1])
+    HadArthritis = st.selectbox("Had Arthritis", [0, 1])
+    HadDiabetes = st.selectbox("Had Diabetes", [0, 1])
+    DeafOrHardOfHearing = st.selectbox("Deaf or Hard of Hearing", [0, 1])
+    DifficultyConcentratingt = st.selectbox("Difficulty Concentrating", [0, 1])
+    DifficultyWalking = st.selectbox("Difficulty Walking", [0, 1])
+    DifficultyDressingBathing = st.selectbox("Difficulty Dressing/Bathing", [0, 1])
+    SmokerStatus = st.selectbox("Smoker Status", [0, 1, 2])
+    ChestScan = st.selectbox("Chest Scan", [0, 1])
+    RaceEthnicityCategory = st.selectbox("Race/Ethnicity", [0, 1, 2, 3, 4, 5, 6])
+    AgeCategory = st.selectbox("Age Category", list(range(1, 14)))
+    BMI = st.slider("BMI", 10.0, 50.0, 22.0)
+    AlcoholDrinkers = st.selectbox("Alcohol Drinkers", [0, 1])
 
-    return pd.DataFrame([data])
+    submitted = st.form_submit_button("Predict")
 
-# Get input data
-input_df = user_input_features()
+if submitted:
+    # Collect input in correct order
+    input_data = [
+        Sex, GeneralHealth, PhysicalHealthDays, MentalHealthDays, LastCheckupTime,
+        PhysicalActivities, SleepHours, RemovedTeeth, HadAngina,
+        HadStroke, HadAsthma, HadSkinCancer, HadCOPD, HadDepressiveDisorder,
+        HadKidneyDisease, HadArthritis, HadDiabetes, DeafOrHardOfHearing,
+        DifficultyConcentratingt, DifficultyWalking, DifficultyDressingBathing,
+        SmokerStatus, ChestScan, RaceEthnicityCategory, AgeCategory, BMI, AlcoholDrinkers
+    ]
 
-# Scale features
-input_scaled = scaler.transform(input_df)
+    # Convert to DataFrame with correct column names
+    input_df = pd.DataFrame([input_data], columns=FEATURE_COLUMNS)
 
-# Predict
-prediction = model.predict(input_scaled)
-prediction_proba = model.predict_proba(input_scaled)
+    # Scale input
+    input_scaled = scaler.transform(input_df)
 
-# Output
-st.subheader("Prediction Result")
-result = "🚨 At Risk of Heart Attack" if prediction[0] == 1 else "✅ Not at Risk"
-st.write(f"**Prediction:** {result}")
-st.write(f"**Probability of Risk:** {prediction_proba[0][1]:.2f}")
+    # Make prediction
+    prediction = model.predict(input_scaled)[0]
+    prediction_proba = model.predict_proba(input_scaled)[0][1]
+
+    # Display results
+    st.subheader("Prediction Results")
+    st.write("Risk of Cardiovascular Disease:", "💔 Yes" if prediction == 1 else "✅ No")
+    st.write(f"Predicted Probability: {prediction_proba:.2%}")
